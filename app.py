@@ -1,14 +1,35 @@
 import pickle
 import streamlit as st
 import requests
+import time
+import random
+import logging
+
+
 
 def fetch_poster(movie_id):
-    url = "https://api.themoviedb.org/3/movie/{}?api_key=8265bd1679663a7ea12ac168da84d2e8&language=en-US".format(movie_id)
-    data = requests.get(url)
-    data = data.json()
-    poster_path = data['poster_path']
-    full_path = "https://image.tmdb.org/t/p/w500/" + poster_path
-    return full_path
+    url = f"https://api.themoviedb.org/3/movie/{movie_id}?api_key=8265bd1679663a7ea12ac168da84d2e8&language=en-US"
+    max_attempts = 5  # Maximum retry attempts
+    for attempt in range(max_attempts):
+        try:
+            # Adding delay to prevent rate-limiting
+            time.sleep(1)
+            response = requests.get(url, timeout=30)  # Increased timeout to 30 seconds
+            response.raise_for_status()  # Raises error for non-success status codes
+            data = response.json()
+            poster_path = data.get('poster_path')
+            if poster_path:
+                return f"https://image.tmdb.org/t/p/w500/{poster_path}"
+            else:
+                return "https://via.placeholder.com/500x750?text=No+Poster+Available"
+        except requests.exceptions.RequestException as e:
+            # Implementing exponential backoff with randomness
+            wait_time = 2 ** attempt + random.uniform(0, 1)
+            logging.error(f"Error fetching poster for movie ID {movie_id}: {e}. Retrying in {wait_time:.2f} seconds.")
+            time.sleep(wait_time)
+
+    # Return placeholder image if all retries fail
+    return "https://via.placeholder.com/500x750?text=Error+Fetching+Poster"
 
 def recommend(movie):
     index = movies[movies['title'] == movie].index[0]
@@ -36,14 +57,14 @@ selected_movie = st.selectbox(
 
 if st.button('Show Recommendation'):
     recommended_movie_names,recommended_movie_posters = recommend(selected_movie)
-    col1, col2, col3, col4, col5 = st.beta_columns(5)
+    col1, col2, col3, col4, col5 = st.columns(5)
+
     with col1:
         st.text(recommended_movie_names[0])
         st.image(recommended_movie_posters[0])
     with col2:
         st.text(recommended_movie_names[1])
         st.image(recommended_movie_posters[1])
-
     with col3:
         st.text(recommended_movie_names[2])
         st.image(recommended_movie_posters[2])
